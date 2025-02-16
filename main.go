@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/terratensor/docx2txt/internal/brokendocx"
 	"github.com/terratensor/docx2txt/internal/docc"
 )
 
@@ -31,6 +32,7 @@ func convertDocxToTxt(inputPath, outputPath string, wg *sync.WaitGroup, counter 
 	defer r.Close()
 
 	var doc string
+	var brokendocxError bool
 	// Парсим текст из docx файла, если получим ошибку, то надо запустить brokenXML парсер
 	// Извлекаем текст из документа
 	for {
@@ -39,11 +41,34 @@ func convertDocxToTxt(inputPath, outputPath string, wg *sync.WaitGroup, counter 
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			logErrorAndMoveFile(inputPath, errorDir, fmt.Sprintf("Ошибка при чтении из файла: %v", err), logger)
-			return
+			brokendocxError = true
+			break
+			// logErrorAndMoveFile(inputPath, errorDir, fmt.Sprintf("Ошибка при чтении из файла: %v", err), logger)
+			// return
 		}
 
 		doc += text + "\n"
+	}
+	// Если получили ошибку на предыдущем шаге, то запускаем brokenXML парсер
+	if brokendocxError {
+		br, err := brokendocx.NewReader(inputPath, reBase64)
+		if err != nil {
+			logErrorAndMoveFile(inputPath, errorDir, fmt.Sprintf("Ошибка при прочтении текста изbrokenXML файла: %v", err), logger)
+			return
+		}
+		// Парсим текст из docx файла
+		for {
+
+			text, err := br.Read()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				logErrorAndMoveFile(inputPath, errorDir, fmt.Sprintf("Ошибка при чтении из файла: %v", err), logger)
+				return
+			}
+
+			doc += text + "\n"
+		}
 	}
 
 	// Сохраняем текст в файл
